@@ -2,6 +2,7 @@ import os
 import random
 import time
 from characters import characters
+from assets import DOORS, PUPPY, ROBBER
 
 def clear_screen():
     """Clears the console screen."""
@@ -56,8 +57,63 @@ def russian_roulette_phase():
         print("\n*CLICK*")
         time.sleep(2)
         print(f"\n{character['name']} says: '{random.choice(character['lose_dialogue'])}'")
-        input("\nPress Enter to try guessing again...")
+        input("\nPress Enter to continue to the next challenge...")
         return True  # Player survives
+
+def choose_the_door_phase():
+    """Handles the 'Choose the Door' mini-game."""
+    clear_screen()
+    print("You survived... but your ordeal is not over.")
+    print("Before you lies a choice. Behind one of these doors is a robber.")
+    print("Find the robber to win another chance. Find a puppy, and you lose.")
+    print("Which door do you choose?\n")
+
+    # Display doors side-by-side
+    door_art = [d.strip().splitlines() for d in DOORS]
+    # Find the maximum number of lines in any door art to handle different heights
+    max_lines = max(len(d) for d in door_art) if door_art else 0
+    # Find the maximum width of a line in any door art for alignment
+    max_width = max(len(line) for d in door_art for line in d) if max_lines > 0 else 0
+
+    for i in range(max_lines):
+        line_to_print = ""
+        for d in door_art:
+            if i < len(d):
+                # Pad each line to the max width for proper alignment
+                line_to_print += d[i].ljust(max_width + 2) # +2 for spacing
+            else:
+                # Add padding if one art is shorter than another
+                line_to_print += " " * (max_width + 2)
+        print(line_to_print)
+
+    robber_door = random.randint(1, 3)
+
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1, 2, or 3): "))
+            if 1 <= choice <= 3:
+                break
+            else:
+                print("Invalid choice. Please enter 1, 2, or 3.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+    clear_screen()
+    print(f"You chose door number {choice}.")
+    print("Behind the door is...")
+    time.sleep(2)
+
+    if choice == robber_door:
+        print(ROBBER)
+        print("\nYou found the robber! A strange victory, but a victory nonetheless.")
+        print("You've earned another guess.")
+        input("Press Enter to continue...")
+        return True # Player wins
+    else:
+        print(PUPPY)
+        print("\nYou found a puppy! It's adorable, but... you were supposed to find the robber.")
+        print("The cuteness is overwhelming. You lose.")
+        return False # Player loses
 
 def game_over_screen():
     """Displays the game over screen."""
@@ -119,9 +175,21 @@ def main_game_loop():
             else:
                 print("\nWrong. Now you must face the consequences.")
                 input("Press Enter to continue...")
-                player_is_alive = russian_roulette_phase()
-                if not player_is_alive:
+
+                # Phase 2: Russian Roulette
+                survived_roulette = russian_roulette_phase()
+
+                if not survived_roulette:
                     game_over_screen()
+                    player_is_alive = False
+                    break
+
+                # Phase 3: Choose the Door
+                survived_door_game = choose_the_door_phase()
+
+                if not survived_door_game:
+                    game_over_screen()
+                    player_is_alive = False
                     break
 
         if not play_again():
