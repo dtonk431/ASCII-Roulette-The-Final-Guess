@@ -1,207 +1,133 @@
-import os
+import kivy
+kivy.require('2.3.1')
+
+from kivy.app import App
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.properties import StringProperty, ObjectProperty, NumericProperty
+from kivy.clock import Clock
 import random
-import time
+
 from characters import characters
 from assets import DOORS, PUPPY, ROBBER
 
-def clear_screen():
-    """Clears the console screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+class GameManager(ScreenManager):
+    secret_number = NumericProperty(0)
+    current_character = ObjectProperty(None)
+    robber_door = NumericProperty(0)
 
-def display_title_screen():
-    """Displays the title screen of the game."""
-    clear_screen()
-    print("************************************************************")
-    print("*                                                          *")
-    print("*        Welcome to GUESS THE NUMBER or... ELSE!           *")
-    print("*                                                          *")
-    print("************************************************************")
-    print("\nI'm thinking of a number between 1 and 25.")
-    print("Guess correctly, or face the consequences...")
-    input("\nPress Enter to start...")
+    def start_new_game(self):
+        """Resets game state for a new round."""
+        self.secret_number = random.randint(1, 25)
+        # Reset guessing screen message
+        guessing_screen = self.get_screen('guessing')
+        guessing_screen.update_message("I'm thinking of a number between 1 and 25...")
+        guessing_screen.ids.guess_input.text = ""
+        self.current = 'guessing'
 
-def get_player_guess():
-    """Prompts the player for a number guess and handles invalid input."""
-    while True:
+    def check_guess(self, guess_text):
+        """Checks the player's number guess."""
+        guessing_screen = self.get_screen('guessing')
         try:
-            guess = int(input("I'm thinking of a number between 1 and 25. What is it? "))
-            if 1 <= guess <= 25:
-                return guess
+            guess = int(guess_text)
+            if not (1 <= guess <= 25):
+                guessing_screen.update_message("Number must be between 1 and 25.")
+                return
+
+            if guess == self.secret_number:
+                self.get_screen('result').show_win()
+                self.current = 'result'
             else:
-                print("Invalid input. Please enter a number between 1 and 25.")
+                guessing_screen.update_message(f"'{guess}' is wrong. Face the consequences.")
+                self.current_character = random.choice(characters)
+                # Use a short delay before transitioning to roulette
+                Clock.schedule_once(lambda dt: self.transition_to_screen('roulette'), 1.5)
         except ValueError:
-            print("Invalid input. Please enter a number.")
+            guessing_screen.update_message("Please enter a valid number.")
 
-def russian_roulette_phase():
-    """Handles the Russian Roulette phase of the game."""
-    character = random.choice(characters)
-    clear_screen()
-    print(character["art"])
-    print(f"\n{character['name']} says: '{character['intro_dialogue']}'")
+    def play_roulette(self):
+        """Simulates the Russian Roulette event."""
+        roulette_screen = self.get_screen('roulette')
+        roulette_screen.show_outcome_text("*click*")
 
-    print("\nSpinning the chamber...")
-    time.sleep(2)
+        # Schedule the actual outcome reveal
+        Clock.schedule_once(self.reveal_roulette_outcome, 2)
 
-    # To build tension
-    print("*click*")
-    time.sleep(1)
+    def reveal_roulette_outcome(self, dt):
+        """Reveals the roulette outcome and transitions."""
+        outcome = random.randint(1, 6)
+        roulette_screen = self.get_screen('roulette')
 
-    outcome = random.randint(1, 6)
+        if outcome == 1: # Player loses
+            roulette_screen.show_outcome_text("BANG!")
+            message = f"{self.current_character['name']} says: '{random.choice(self.current_character['win_dialogue'])}'"
+            self.get_screen('result').show_game_over(message)
+            Clock.schedule_once(lambda dt: self.transition_to_screen('result'), 2)
+        else: # Player survives
+            roulette_screen.show_outcome_text("*CLICK*... you survive. For now.")
+            self.robber_door = random.randint(1, 3)
+            Clock.schedule_once(lambda dt: self.transition_to_screen('door'), 2)
 
-    if outcome == 1: # The losing number
-        print("\nBANG!")
-        time.sleep(2)
-        print(f"\n{character['name']} says: '{random.choice(character['win_dialogue'])}'")
-        return False  # Player loses
-    else:
-        print("\n*CLICK*")
-        time.sleep(2)
-        print(f"\n{character['name']} says: '{random.choice(character['lose_dialogue'])}'")
-        input("\nPress Enter to continue to the next challenge...")
-        return True  # Player survives
+    def play_door_game(self, door_number):
+        """Handles the 'Choose the Door' mini-game logic."""
+        door_screen = self.get_screen('door')
+        door_screen.reveal_door(door_number, self.robber_door)
 
-def choose_the_door_phase():
-    """Handles the 'Choose the Door' mini-game."""
-    clear_screen()
-    print("You survived... but your ordeal is not over.")
-    print("Before you lies a choice. Behind one of these doors is a robber.")
-    print("Find the robber to win another chance. Find a puppy, and you lose.")
-    print("Which door do you choose?\n")
-
-    # Display doors side-by-side
-    door_art = [d.strip().splitlines() for d in DOORS]
-    # Find the maximum number of lines in any door art to handle different heights
-    max_lines = max(len(d) for d in door_art) if door_art else 0
-    # Find the maximum width of a line in any door art for alignment
-    max_width = max(len(line) for d in door_art for line in d) if max_lines > 0 else 0
-
-    for i in range(max_lines):
-        line_to_print = ""
-        for d in door_art:
-            if i < len(d):
-                # Pad each line to the max width for proper alignment
-                line_to_print += d[i].ljust(max_width + 2) # +2 for spacing
-            else:
-                # Add padding if one art is shorter than another
-                line_to_print += " " * (max_width + 2)
-        print(line_to_print)
-
-    robber_door = random.randint(1, 3)
-
-    while True:
-        try:
-            choice = int(input("\nEnter your choice (1, 2, or 3): "))
-            if 1 <= choice <= 3:
-                break
-            else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-
-    clear_screen()
-    print(f"You chose door number {choice}.")
-    print("Behind the door is...")
-    time.sleep(2)
-
-    if choice == robber_door:
-        print(ROBBER)
-        print("\nYou found the robber! A strange victory, but a victory nonetheless.")
-        print("You've earned another guess.")
-        input("Press Enter to continue...")
-        return True # Player wins
-    else:
-        print(PUPPY)
-        print("\nYou found a puppy! It's adorable, but... you were supposed to find the robber.")
-        print("The cuteness is overwhelming. You lose.")
-        return False # Player loses
-
-def game_over_screen():
-    """Displays the game over screen."""
-    clear_screen()
-    print("************************************************************")
-    print("*                                                          *")
-    print("*                        GAME OVER                         *")
-    print("*                                                          *")
-    print("************************************************************")
-
-def display_win_screen():
-    """Displays the win screen with celebratory ASCII art."""
-    clear_screen()
-    print("""
-
-        ___________
-       '._==_==_=_.'
-       .-\\:      /-.
-      | (|:.     |) |
-       '-|:.     |-'
-         \\::.    /
-          '::. .'
-            ) (
-          _.' '._
-         `-------`
-
-    """)
-    print("************************************************************")
-    print("*                                                          *")
-    print("*            CONGRATULATIONS! YOU GUESSED IT!              *")
-    print("*                                                          *")
-    print("************************************************************")
-
-
-def play_again():
-    """Asks the player if they want to play again."""
-    while True:
-        choice = input("\nPlay Again? (yes/no): ").lower()
-        if choice in ["yes", "y"]:
-            return True
-        elif choice in ["no", "n"]:
-            return False
+        if door_number == self.robber_door:
+            # Player wins, schedule transition back to guessing
+            Clock.schedule_once(lambda dt: self.start_new_game(), 3)
         else:
-            print("Invalid input. Please enter 'yes' or 'no'.")
+            # Player loses, schedule game over
+            self.get_screen('result').show_game_over("You found a puppy! Adorable... but you lose.")
+            Clock.schedule_once(lambda dt: self.transition_to_screen('result'), 3)
 
-def main_game_loop():
-    """The main game loop that controls the flow of the game."""
-    while True:
-        secret_number = random.randint(1, 25)
-        player_is_alive = True
+    def transition_to_screen(self, screen_name):
+        self.current = screen_name
 
-        while player_is_alive:
-            clear_screen()
-            guess = get_player_guess()
+class TitleScreen(Screen):
+    pass
 
-            if guess == secret_number:
-                display_win_screen()
-                break
-            else:
-                print("\nWrong. Now you must face the consequences.")
-                input("Press Enter to continue...")
+class GuessingScreen(Screen):
+    message = StringProperty("I'm thinking of a number between 1 and 25...")
+    def update_message(self, new_message):
+        self.message = new_message
 
-                # Phase 2: Russian Roulette
-                survived_roulette = russian_roulette_phase()
+class RouletteScreen(Screen):
+    outcome_text = StringProperty('')
+    def show_outcome_text(self, text):
+        self.outcome_text = text
 
-                if not survived_roulette:
-                    game_over_screen()
-                    player_is_alive = False
-                    break
+class DoorScreen(Screen):
+    feedback_text = StringProperty('Choose a door... Find the robber to survive.')
+    def reveal_door(self, choice, correct_door):
+        if choice == correct_door:
+            self.feedback_text = f"Door {choice}... You found the robber! You live!"
+        else:
+            self.feedback_text = f"Door {choice}... It's a puppy! You lose!"
 
-                # Phase 3: Choose the Door
-                survived_door_game = choose_the_door_phase()
+class ResultScreen(Screen):
+    result_text = StringProperty('')
+    art_text = StringProperty('')
+    def show_win(self):
+        self.result_text = "CONGRATULATIONS! YOU GUESSED IT!"
+        self.art_text = """
+            ___________
+           '._==_==_=_.'
+           .-\\:      /-.
+          | (|:.     |) |
+           '-|:.     |-'
+             \\::.    /
+              '::. .'
+                ) (
+              _.' '._
+             `-------`
+        """
+    def show_game_over(self, message="GAME OVER"):
+        self.result_text = message
+        self.art_text = ""
 
-                if not survived_door_game:
-                    game_over_screen()
-                    player_is_alive = False
-                    break
+class GuessOrDieApp(App):
+    def build(self):
+        return GameManager()
 
-        if not play_again():
-            break
-
-    print("\nThanks for playing!")
-
-
-def main():
-    """Main function to run the game."""
-    display_title_screen()
-    main_game_loop()
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    GuessOrDieApp().run()
