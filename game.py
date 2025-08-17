@@ -50,12 +50,12 @@ def russian_roulette_phase():
     if outcome == 1: # The losing number
         print("\nBANG!")
         time.sleep(2)
-        print(f"\n{character['name']} says: '{character['win_dialogue']}'")
+        print(f"\n{character['name']} says: '{random.choice(character['win_dialogue'])}'")
         return False  # Player loses
     else:
         print("\n*CLICK*")
         time.sleep(2)
-        print(f"\n{character['name']} says: '{character['lose_dialogue']}'")
+        print(f"\n{character['name']} says: '{random.choice(character['lose_dialogue'])}'")
         input("\nPress Enter to try guessing again...")
         return True  # Player survives
 
